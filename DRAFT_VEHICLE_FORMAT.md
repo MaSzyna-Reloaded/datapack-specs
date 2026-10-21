@@ -1,24 +1,24 @@
 # Modele dynamiczne — profil glTF
 
-Status: projekt specyfikacji 0.3.0. Format bazowy: glTF 2.0.
+Status: projekt specyfikacji 0.4.0. Format bazowy: glTF 2.0.
 
 ## 1. Zakres i część wspólna
 
 Profil opisuje pojazd lub jego wyposażenie jako instancję powiązaną z symulacją. Geometria i standardowe efekty są tworzone w narzędziu autorskim. Metadane opisują, jak symulacja odnajduje części i steruje ich prezentacją.
 
-Obowiązują sekcje 2–11 [profilu statycznego](STATIC_MODEL_FORMAT.md): kontener, układ, materiały, światła, identyfikatory, granice, georeferencja, źródła danych, klipy, kanały, widoczność i cząstki. Niniejszy dokument rozszerza te reguły. MUST, SHOULD i MAY mają znaczenie zdefiniowane w profilu wspólnym.
+Obowiązuje [wspólny profil modeli](MODEL_FORMAT.md), w tym wymienne tekstury i niezależne warstwy świateł. Niniejszy dokument dodaje kontrakt pojazdu.
 
-| Wspólne dla obu klas | Właściwe instancji pojazdu |
+| Reguły wspólne | Właściwe instancji pojazdu |
 |---|---|
-| Geometria, PBR, alpha i warianty materiałów | Powiązanie z pojazdem symulowanym |
+| Geometria, PBR, alpha i wymienne tekstury | Powiązanie z pojazdem symulowanym |
 | Światła `point`, `spot`, `directional` | Sygnały czoła/końca, reflektory i przygaszenie |
 | Klipy, skinning i morph targets | Próbowanie klipów stanem drzwi, nastawnika, wycieraczek |
 | Widoczność i emisja | Warianty sprzęgów, przewodów i wyposażenia |
 | Dym, para i inne cząstki | Zależność emisji od pracy silnika |
-| Granice i pochodzenie danych | Obwiednia ruchu mechanizmów i pantografów |
+| Pochodzenie danych | Dane źródłowe modelu i pomiarów |
 | Stabilne ID i kanały wejściowe | Osie, wózki, kabiny, punkty styku i zaczepy |
 
-Nagłówek używa `model_class: "dynamic"`. `model_type` przyjmuje `vehicle`, `cab` albo `attachment`. Umieszczenie instancji aktualizuje symulacja. Georeferencja może dokumentować obiekt źródłowy pomiaru.
+Umieszczenie instancji aktualizuje symulacja. `asset.extras.osm` może opisywać model tagami OSM, jeśli istnieje odpowiadający mu zestaw tagów. Opcjonalne `asset.extras.geo` może dokumentować położenie obiektu źródłowego pomiaru.
 
 ## 2. Nagłówek i osie pojazdu
 
@@ -28,20 +28,7 @@ Przykład obiektu `asset`:
 {
   "version": "2.0",
   "extras": {
-    "model_format_version": "0.3.0",
-    "model_class": "dynamic",
-    "model_type": "vehicle",
-    "model_id": "vehicle.example.locomotive",
-    "bounds": {
-      "min": [-1.5, 0.0, -9.0],
-      "max": [1.5, 4.5, 9.0],
-      "size": [3.0, 4.5, 18.0]
-    },
-    "motion_bounds": {
-      "min": [-1.7, -0.1, -9.2],
-      "max": [1.7, 6.5, 9.2],
-      "size": [3.4, 6.6, 18.4]
-    }
+    "model_format_version": "0.4.0"
   }
 }
 ```
@@ -49,8 +36,6 @@ Przykład obiektu `asset`:
 Przód pojazdu jest w +Z, góra w +Y, lewa strona w +X. Lewa/prawa strona i przód/tył odnoszą się do konstrukcji modelu, zachowując znaczenie podczas zmiany kierunku jazdy. Zalecany początek układu leży na osi podłużnej, na poziomie główek szyn i w środku długości konstrukcyjnej.
 
 Każdy niezależnie poruszany element ma node o pivocie w miejscu jego obrotu albo przesunięcia. Sztywne części mogą być zwykłymi node'ami; deformowane przewody, mieszki lub postacie mogą korzystać ze skinów.
-
-`bounds` opisuje pozycję spoczynkową z zamkniętymi drzwiami i opuszczonymi pantografami. `motion_bounds` obejmuje wszystkie dopuszczone pozy, wysunięcia i odchylenia. Dekoracyjne cząstki oraz zasięgi światła mają własne obwiednie efektów.
 
 ## 3. Identyfikatory i budowa modelu
 
@@ -203,7 +188,7 @@ Przykład extras node'a źródła:
 }
 ```
 
-`light_control` mnoży intensywność zapisaną przez eksportera w definicji światła. Przygaszenie 0.2 daje 20% tej wartości. Materiał soczewki może używać `emission_control` tego samego kanału. Rozkład fotometryczny, barwa i stożek należą do standardowego opisu światła.
+`light_control` mnoży intensywność zapisaną przez eksportera w definicji światła. Przygaszenie 0.2 daje 20% tej wartości. Sterowana powierzchnia soczewki używa `light_id`; jej stan może być powiązany z tym samym kanałem. `emissiveTexture` materiału pozostaje stała. Rozkład fotometryczny, barwa i stożek należą do standardowego opisu światła.
 
 Przy odrębnej geometrii przygaszonej lampy jej node ma standardowe `KHR_node_visibility` oraz:
 
@@ -312,7 +297,7 @@ Eksporter MUST sprawdzić zgodność geometrii mechanizmu z wybranym solverem. M
 
 Kabina i przedziały są node'ami zespołów z odpowiednimi ID. Elementy ograniczone do wybranych widoków mogą mieć `node.extras.view_filter`, tablicę wartości `external`, `cab`, `passenger`, `reflection`, `shadow`, `editor`. Pominięcie oznacza wszystkie widoki. Filtr obowiązuje dla poddrzewa; wynik jest przecięciem filtrów przodków. Stan widoku dostarcza renderer dla konkretnego przebiegu.
 
-Kamera stanowiska jest standardową kamerą glTF na node'ie, np. `vehicle.cab.0.camera`. Jej transform definiuje pozycję i orientację autora; symulator dobiera aktywną kamerę przez ID.
+Opcjonalny punkt obserwatora stanowiska jest kamerą glTF przypiętą do node'a, np. `vehicle.cab.0.camera`. Transform node'a definiuje pozycję i orientację punktu obserwatora. Symulator może użyć go do ustawienia aktywnej kamery.
 
 Wyświetlacz ma node z geometrią i materiałem. `node.extras.display` wiąże zawartość z kanałem:
 
@@ -369,18 +354,18 @@ Pozycja i kierunek emisji dziedziczą ruch pudła. Prędkość emitera obejmuje 
 | Element przygotowany w Blenderze | Dane docelowe | Dodatkowy kontrakt symulacji |
 |---|---|---|
 | Point / Spot / Sun | `KHR_lights_punctual` | Opcjonalny `light_control` |
-| Emisyjny materiał soczewki | PBR + emissive strength | Opcjonalny `emission_control` |
+| Sterowana powierzchnia soczewki | Mesh z atlasem bazowym i osobnym atlasem światła | `light_id`, opcjonalny `light_color` |
 | Ruch drzwi wypieczony z constraints | Klip TRS | `playback` kanału otwarcia |
 | Armatura i deformowany przewód | Skin i jointy | Klip albo mechanizm sterujący jointami |
 | Shape keys ładunku | Morph targets | Klip próbkowany kanałem ładunku |
 | Pantograf z IK autorskim | Wypieczony klip wszystkich członów | `pantograph.height_to_time` |
 | Dwuczłonowy rig sterowany celem świata | Node'y / jointy | `ik` z kanałem celu i pole |
 | Koło z poprawnym pivotem | Node | `rotation_control` |
-| Kamera kabiny | `camera` i node | `semantic_id` stanowiska |
-| Malowanie pojazdu | `KHR_materials_variants` | Wybór wariantu w konfiguracji |
+| Opcjonalny punkt obserwatora kabiny | Kamera glTF i node | `semantic_id` stanowiska |
+| Malowanie pojazdu | `node.extras.replacable_texture` | Wybór tekstur w skinie |
 | Empty wylotu spalin | Node transformacyjny | `smoke_source` |
 
-Eksport MUST zachować node'y używane jako pivoty, punkty kontaktu i cele referencji. Optymalizator aktualizuje indeksy, JSON Pointer i mapowania wariantów, zachowując semantyczne ID. Importer tworzy mapy ID raz podczas ładowania assetu.
+Eksport MUST zachować node'y używane jako pivoty, punkty kontaktu i cele referencji. Optymalizator aktualizuje indeksy i JSON Pointer, zachowując semantyczne ID. Importer tworzy mapy ID raz podczas ładowania assetu.
 
 ## 13. Mapowanie T3D/E3D i MMD
 
@@ -427,7 +412,7 @@ Kod wybiera `_xon` dla reflektorów przy `DimHeadlights`, a dla `highbeam` podcz
 | `mechanik1/2` | Postać sterowana zajęciem kabiny |
 | `shutters1/2` | Żaluzje sterowane klipem lub widocznością |
 | `external_only` | `view_filter` zawierający wymagane widoki zewnętrzne |
-| Materiały `-1…-4` / `replacableskin` | `material_slot` `skin.1…skin.4` |
+| Materiały `-1…-4` / `replacableskin` | Domyślne materiały i tekstury glTF; `node.extras.replacable_texture` oraz mapowanie indeksów przez `asset.extras.t3d.skins` |
 | Tablica kierunkowa | `display` na rozpoznanej powierzchni |
 | `cien` | Geometria pomocnicza klasyfikowana w raporcie migracji; cienie modelu w runtime wynikają z jego geometrii |
 
@@ -450,7 +435,6 @@ Współdzielony asset przechowuje dane bazowe. Materiały, światła, klipy, mec
 
 Walidator profilu MUST dodatkowo sprawdzić:
 
-- `model_class: dynamic` oraz właściwy `model_type`;
 - zgodność ID części i rozwiązywalność kanałów zadeklarowanych przez model;
 - poprawne pivoty, osie jednostkowe i wypieczoną skalę mechanizmów;
 - zakresy klipów i jednoznaczny autor każdej właściwości;
@@ -458,7 +442,6 @@ Walidator profilu MUST dodatkowo sprawdzić:
 - monotoniczność tabeli pantografu, jej pokrycie i tolerancję kontaktu;
 - strukturę, długości i płaszczyznę spoczynkową łańcucha IK;
 - domyślne stany widoczności wszystkich wariantów;
-- zgodność granic z próbkami pozy drzwi, wózków, pantografów i innych mechanizmów;
 - materiały wyświetlaczy, fonty i zasoby emiterów.
 
 Testy integracyjne pipeline SHOULD obejmować:
@@ -479,7 +462,7 @@ Testy integracyjne pipeline SHOULD obejmować:
 
 ## 16. Źródła standardów i mapowania
 
-- [Reguły wspólne i źródła glTF](STATIC_MODEL_FORMAT.md).
+- [Reguły wspólne i źródła glTF](MODEL_FORMAT.md).
 - [KHR_animation_pointer](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_animation_pointer).
 - [KHR_node_visibility](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_node_visibility).
 - [KHR_lights_punctual](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual).
