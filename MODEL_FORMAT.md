@@ -1,6 +1,6 @@
 # Modele — wspólny profil glTF
 
-Status: projekt specyfikacji 0.4.0. Format bazowy: glTF 2.0.
+Status: projekt specyfikacji 0.5.0. Format bazowy: glTF 2.0.
 
 ## 1. Zakres i reguły wspólne
 
@@ -55,6 +55,8 @@ Poniższe rozszerzenia mogą być dobierane do materiałów i dystrybucji zasob�
 
 Dobór rozszerzeń opiera się na [rejestrze Khronos](https://github.com/KhronosGroup/glTF/blob/main/extensions/README.md). Lista powyżej jest wyborem funkcji dla tego profilu. Każde użycie stosuje semantykę i ograniczenia właściwej specyfikacji rozszerzenia.
 
+Profil nie przenosi kodu shaderów ani grafów materiałów. Wygląd zależny od stanu świata opisują parametry, np. reakcję na pogodę w 4.10, a implementuje go renderer. Dołączanie programów GLSL do glTF próbowało rozszerzenie `KHR_techniques_webgl`, które Khronos zarchiwizował.
+
 ## 4. Struktura modelu
 
 ### 4.1. Nagłówek
@@ -65,7 +67,7 @@ Przykład nagłówka `asset`:
 {
   "version": "2.0",
   "extras": {
-    "model_format_version": "0.4.0"
+    "model_format_version": "0.5.0"
   }
 }
 ```
@@ -73,7 +75,7 @@ Przykład nagłówka `asset`:
 
 | Klucz w `asset.extras` | Opisana wartość | Przykład | Wymaganie |
 | --- | --- | --- | --- |
-| `model_format_version` | Wersja profilu modelu. | `"0.4.0"` | Wymagane |
+| `model_format_version` | Wersja profilu modelu. | `"0.5.0"` | Wymagane |
 | `osm` | Tagi opisujące model. | `{"natural":"tree"}` | Opcjonalne |
 | `geo` | Położenie i orientacja geograficzna modelu. | `{"lat":54.3520,"lng":18.6466,"elevation":12.5,"heading":90.0}` | Opcjonalne |
 | `t3d` | Dane zgodności z T3D/E3D. | `{"skins":["body","cab"]}` | Opcjonalne |
@@ -179,6 +181,8 @@ Eksporter dobiera tryb do zamierzonego efektu. Przezroczystość pokrycia i tran
 Stała emisja powierzchni jest zapisana w materiale, z opcjonalnym [KHR_materials_emissive_strength](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_emissive_strength). Oświetlenie otoczenia przypisuje się światłu powiązanemu z odpowiednim węzłem.
 
 `emissiveTexture` jest zawsze renderowana zgodnie z materiałem i nie służy do włączania ani wyłączania świateł.
+
+Reakcję materiału na pogodę opisuje opcjonalne `material.extras.weather` (4.10.2).
 
 ### 4.5. Wymienne tekstury
 
@@ -321,9 +325,112 @@ Zegar może używać klipów `position` próbkowanych kanałami `clock.second`, 
 
 #### 4.9.1. Kontrakt aktualizacji
 
-Kanał `source` jest nazwą wartości dostarczanej przez świat lub symulację do konkretnej instancji. Konfiguracja instancji rozwiązuje wymagane kanały przed aktywacją. Kanały przekazują wartości logiczne, liczby albo tekst zgodnie z odbiorcą; kanały celów IK w profilu dynamicznym przekazują wektor trójelementowy (`vec3`). Liczby są skończone.
+Kanał `source` jest nazwą wartości dostarczanej przez świat lub symulację do konkretnej instancji. Konfiguracja instancji rozwiązuje wymagane kanały przed aktywacją. Kanały przekazują wartości logiczne, liczby albo tekst zgodnie z odbiorcą; kanały celów IK w profilu dynamicznym i `weather.wind` przekazują wektor trójelementowy (`vec3`). Kanały `clock.*` i `weather.*` dostarcza świat. Liczby są skończone.
 
 Kolejność: odczyt spójnej migawki kanałów → próbkowanie klipów → sterowniki proceduralne → aktualizacja przekształceń w układzie świata → światła, widoczność, emisja i cząstki. Każda zapisywana właściwość ma jednego aktywnego autora w danej instancji. Konflikt dwóch klipów lub klipu i sterownika jest błędem konfiguracji. Współdzielone materiały mają stan instancji albo kopię przy zapisie. Dwie instancje zachowują niezależne stany odtwarzania.
+
+### 4.10. Pogoda (DRAFT)
+
+Opad, jego kierunek i wiatr symuluje świat. Model opisuje reakcję swoich powierzchni: moknięcie, spływ wody, zaleganie śniegu oraz odprowadzanie wody okapem i rynną. Renderer rysuje efekt na podstawie tych danych; model nie zawiera kodu shaderów (sekcja 3). Renderer bez obsługi tej sekcji pokazuje materiały bez zmian.
+
+#### 4.10.1. Kanały pogodowe
+
+Kanały `weather.*` są zarezerwowane. Świat dostarcza je każdej instancji bez dodatkowej konfiguracji i może nadać instancji wartości lokalne, np. zero pod zadaszeniem. Model może ich używać w każdym polu `source`, np. `smoke_source.source: "weather.rain"`.
+
+| Kanał | Typ | Opisana wartość |
+| --- | --- | --- |
+| `weather.rain` | liczba [0,1] | Natężenie deszczu: `min(opad_mm_h / 20, 1)`. |
+| `weather.snow` | liczba [0,1] | Natężenie opadu śniegu w ekwiwalencie wodnym: `min(opad_mm_h / 5, 1)`. |
+| `weather.wetness` | liczba [0,1] | Zmoczenie odsłoniętej powierzchni: 0 sucha, 1 pełny film wody. |
+| `weather.snow_cover` | liczba [0,1] | Pokrycie śniegiem odsłoniętej powierzchni poziomej. |
+| `weather.wind` | `vec3` | Prędkość wiatru w m/s w układzie świata. |
+
+Narastanie i zanikanie `weather.wetness` oraz `weather.snow_cover` (moknięcie, schnięcie, topnienie) oblicza świat. Model nie przechowuje stanu pogody.
+
+#### 4.10.2. Reakcja materiału
+
+Opcjonalne `material.extras.weather` opisuje, jak materiał reaguje na kanały pogodowe:
+
+```json
+{
+  "semantic_id": "building.roof_tiles",
+  "weather": {
+    "wet": {"porosity": 0.6, "roughness": 0.1, "mask": {"index": 4}},
+    "runoff": {"flow": "slope", "speed": 1.1, "density": 6.0, "min_slope": 0.05},
+    "snow": {"max_slope": 0.8}
+  }
+}
+```
+
+| Klucz w `weather` | Opisana wartość | Przykład | Domyślna wartość | Wymaganie |
+| --- | --- | --- | --- | --- |
+| `wet.porosity` | Porowatość od 0 do 1; określa ściemnienie koloru bazowego po zmoczeniu. | `0.6` | `0.0` | Opcjonalne |
+| `wet.roughness` | Szorstkość powierzchni pokrytej filmem wody, od 0 do 1. | `0.1` | `0.1` | Opcjonalne |
+| `wet.mask` | Tekstura maski: R ekspozycja na opad, G podatność na stojącą wodę. | `{"index": 4}` | R = 1, G = 0 | Opcjonalne |
+| `runoff.flow` | Kierunek spływu: `"slope"` albo tekstura kierunku. | `"slope"` | — | Wymagane w `runoff` |
+| `runoff.speed` | Prędkość strużek w m/s. | `1.1` | `1.0` | Opcjonalne |
+| `runoff.density` | Przybliżona liczba strużek na metr w poprzek spływu. | `6.0` | `4.0` | Opcjonalne |
+| `runoff.min_slope` | Najmniejsze nachylenie powierzchni w radianach, przy którym powstają strużki. | `0.05` | `0.02` | Opcjonalne |
+| `snow.max_slope` | Największe nachylenie powierzchni w radianach, na którym zalega śnieg. | `0.8` | `0.8` | Opcjonalne |
+| `snow.mask` | Tekstura maski: R możliwość zalegania śniegu. | `{"index": 5}` | R = 1 | Opcjonalne |
+
+Pola tekstur mają postać `textureInfo` (`index`, opcjonalne `texCoord`) i są próbkowane w przestrzeni liniowej. Obecność `wet`, `runoff` albo `snow` włącza dany efekt.
+
+Zmoczenie `w = weather.wetness × mask.R`. Kolor bazowy RGB jest mnożony przez `1 − 0.6 × w × porosity`, a szorstkość jest interpolowana liniowo od wartości materiału do `wet.roughness` z wagą `w`. Metaliczność nie zmienia się. Fragment z `mask.G` > 0 może pokryć stojąca woda: gładka powierzchnia z normalną geometrii. Przy `weather.wetness` = 1 pokrywa ona cały fragment z `mask.G` = 1. Krzywą wypełniania dobiera renderer.
+
+Strużki płyną wzdłuż kierunku spływu. Ich natężenie wynosi `weather.rain × mask.R`. Przy `flow: "slope"` kierunkiem jest rzut światowego wektora grawitacji na powierzchnię, więc spływ odpowiada położeniu instancji. Tekstura kierunku koduje w RG jednostkowy kierunek w przestrzeni UV jako `0.5 + 0.5 × kierunek`. Na powierzchni o nachyleniu mniejszym niż `min_slope` strużki nie powstają, a zmoczenie działa nadal. Renderer może zwiększać prędkość wraz z nachyleniem.
+
+Śnieg pokrywa fragmenty o nachyleniu nie większym niż `max_slope`, z udziałem `weather.snow_cover × snow.mask.R`. Wygląd śniegu, kropli i strużek dobiera renderer.
+
+Efekty pogodowe są nakładane w kolejności: zmoczenie → strużki → śnieg. Działają na wynikowych wartościach materiału po animacjach `KHR_animation_pointer` i nie są zapisem właściwości w rozumieniu 4.9.1. Ich stan zależy od kanałów instancji, więc współdzielony materiał podlega regule stanu instancji z 4.9.1.
+
+#### 4.10.3. Odprowadzanie wody
+
+Okap, z którego kapie woda, opisuje `node.extras.drip_line`. Wylot rynny lub rury spustowej opisuje `node.extras.water_outlet`. Powierzchnię zbierającą wodę podaje `catchment_m2` (rzut poziomy w m²). Przepływ wynosi `Q = 20 × x × catchment_m2 / 3 600 000` m³/s, gdzie `x` to wartość kanału `source`.
+
+```json
+{
+  "semantic_id": "building.part_0.roof",
+  "drip_line": {
+    "edges": [
+      {"a": [-5.0, 3.1, 4.2], "b": [5.0, 3.1, 4.2], "outward": [0.0, 0.0, 1.0]}
+    ],
+    "catchment_m2": 42.0
+  }
+}
+```
+
+```json
+{
+  "semantic_id": "building.part_0.downspout.0",
+  "water_outlet": {
+    "catchment_m2": 42.0,
+    "diameter": 0.08,
+    "speed": 0.5
+  }
+}
+```
+
+| Klucz w `drip_line` | Opisana wartość | Przykład | Domyślna wartość | Wymaganie |
+| --- | --- | --- | --- | --- |
+| `edges` | Odcinki okapu w układzie węzła: końce `a`, `b` i poziomy jednostkowy kierunek spływu `outward`. | jak wyżej | — | Wymagane |
+| `catchment_m2` | Powierzchnia dachu odprowadzana przez całą linię. | `42.0` | — | Wymagane |
+| `material` | Referencja materiału kropli. | `"effects.drop"` | materiał renderera | Opcjonalne |
+| `source` | Kanał [0,1] natężenia. | `"weather.rain"` | `"weather.rain"` | Opcjonalne |
+
+| Klucz w `water_outlet` | Opisana wartość | Przykład | Domyślna wartość | Wymaganie |
+| --- | --- | --- | --- | --- |
+| `catchment_m2` | Powierzchnia dachu odprowadzana do wylotu. | `42.0` | — | Wymagane |
+| `diameter` | Średnica wylotu w metrach. | `0.08` | `0.08` | Opcjonalne |
+| `speed` | Prędkość początkowa wody w m/s. | `0.5` | `0.5` | Opcjonalne |
+| `material` | Referencja materiału strumienia. | `"effects.water"` | materiał renderera | Opcjonalne |
+| `source` | Kanał [0,1] natężenia. | `"weather.rain"` | `"weather.rain"` | Opcjonalne |
+
+Przepływ linii okapu rozkłada się równomiernie na długość jej odcinków. Krople odrywają się na krawędzi w kierunku `outward`. Okap z rynną nie należy do `drip_line`; wodę z niego odprowadza `water_outlet`. Wylot wypuszcza strumień wzdłuż lokalnego +Y węzła, jak emiter z 4.8. Ruch kropli i strumienia uwzględnia grawitację i `weather.wind`, a ich kontakt z terenem obsługuje świat. Ukrycie węzła przez `KHR_node_visibility` wyłącza odprowadzanie.
+
+#### 4.10.4. Zakres modelu
+
+Model nie opisuje spadającego opadu, rozbryzgów ani śladów na terenie wokół siebie; robi to świat. Model nie zawiera kodu shaderów, także dla wybranego silnika, ani stałego natężenia opadu. Nowy rodzaj reakcji na pogodę wchodzi do profilu jako nowy klucz z parametrami.
 
 ## 5. Eksport i walidacja
 
@@ -342,6 +449,8 @@ Walidacja profilu sprawdza:
 - przypisanie `light_control` do węzła ze światłem;
 - wartość `light_state` oraz liczbową wartość `light_threshold`;
 - istnienie materiału emitera i dodatnie limity jego życia;
+- zakresy pól `material.extras.weather`: `porosity` i `roughness` w [0,1], `min_slope` i `max_slope` w [0,π/2], istnienie wskazanych tekstur;
+- niepuste `edges` w `drip_line`, poziome jednostkowe `outward`, dodatnie `catchment_m2` w `drip_line` i `water_outlet`;
 - deklaracje rozszerzeń, ich ograniczenia i możliwości importera.
 
 Wersja profilu jest niezależna od `asset.version`. `PATCH` doprecyzowuje kontrakt, `MINOR` dodaje opcjonalne możliwości, a `MAJOR` zmienia interpretację danych. W fazie 0.x importer jawnie negocjuje każdą wersję.

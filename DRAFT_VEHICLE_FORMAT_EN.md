@@ -1,6 +1,6 @@
 # Dynamic models — glTF profile
 
-Status: draft specification 0.4.0. Base format: glTF 2.0.
+Status: draft specification 0.5.0. Base format: glTF 2.0.
 
 ## 1. Scope and common part
 
@@ -28,7 +28,7 @@ Example `asset` object:
 {
   "version": "2.0",
   "extras": {
-    "model_format_version": "0.4.0"
+    "model_format_version": "0.5.0"
   }
 }
 ```

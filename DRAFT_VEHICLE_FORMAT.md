@@ -1,6 +1,6 @@
 # Modele dynamiczne — profil glTF
 
-Status: projekt specyfikacji 0.4.0. Format bazowy: glTF 2.0.
+Status: projekt specyfikacji 0.5.0. Format bazowy: glTF 2.0.
 
 ## 1. Zakres i część wspólna
 
@@ -28,7 +28,7 @@ Przykład obiektu `asset`:
 {
   "version": "2.0",
   "extras": {
-    "model_format_version": "0.4.0"
+    "model_format_version": "0.5.0"
   }
 }
 ```

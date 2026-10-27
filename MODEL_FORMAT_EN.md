@@ -1,6 +1,6 @@
 # Models — common glTF profile
 
-Status: draft specification 0.4.0. Base format: glTF 2.0.
+Status: draft specification 0.5.0. Base format: glTF 2.0.
 
 ## 1. Scope and common rules
 
@@ -55,6 +55,8 @@ The following extensions may be chosen for materials and asset distribution:
 
 Extension selection is based on the [Khronos registry](https://github.com/KhronosGroup/glTF/blob/main/extensions/README.md). The list above is the feature selection for this profile. Each use follows the semantics and constraints of the corresponding extension specification.
 
+The profile does not carry shader code or material graphs. Appearance that depends on the world state is described by parameters, e.g. the weather response in 4.10, and implemented by the renderer. Embedding GLSL programs in glTF was attempted by the `KHR_techniques_webgl` extension, which Khronos archived.
+
 ## 4. Model structure
 
 ### 4.1. Header
@@ -65,7 +67,7 @@ Example `asset` header:
 {
   "version": "2.0",
   "extras": {
-    "model_format_version": "0.4.0"
+    "model_format_version": "0.5.0"
   }
 }
 ```
@@ -73,7 +75,7 @@ Example `asset` header:
 
 | Key in `asset.extras` | Described value | Example | Requirement |
 | --- | --- | --- | --- |
-| `model_format_version` | Model profile version. | `"0.4.0"` | Required |
+| `model_format_version` | Model profile version. | `"0.5.0"` | Required |
 | `osm` | Tags describing the model. | `{"natural":"tree"}` | Optional |
 | `geo` | Geographic position and orientation of the model. | `{"lat":54.3520,"lng":18.6466,"elevation":12.5,"heading":90.0}` | Optional |
 | `t3d` | T3D/E3D compatibility data. | `{"skins":["body","cab"]}` | Optional |
@@ -179,6 +181,8 @@ The exporter chooses the mode matching the intended effect. Coverage transparenc
 Constant surface emission is stored in the material, optionally with [KHR_materials_emissive_strength](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_emissive_strength). Illumination of the surroundings is assigned to a light attached to the corresponding node.
 
 `emissiveTexture` is always rendered according to the material and is not used to switch lights on or off.
+
+The material's response to weather is described by the optional `material.extras.weather` (4.10.2).
 
 ### 4.5. Replaceable textures
 
@@ -321,9 +325,112 @@ A clock may use `position` clips sampled by the channels `clock.second`, `clock.
 
 #### 4.9.1. Update contract
 
-A `source` channel is the name of a value supplied by the world or simulation to a specific instance. Instance configuration resolves the required channels before activation. Channels carry booleans, numbers or text depending on the consumer; IK target channels in the dynamic profile carry a three-component vector (`vec3`). Numbers are finite.
+A `source` channel is the name of a value supplied by the world or simulation to a specific instance. Instance configuration resolves the required channels before activation. Channels carry booleans, numbers or text depending on the consumer; IK target channels in the dynamic profile and `weather.wind` carry a three-component vector (`vec3`). The `clock.*` and `weather.*` channels are supplied by the world. Numbers are finite.
 
 Order: read a consistent snapshot of channels → sample clips → procedural drivers → update world-space transforms → lights, visibility, emission and particles. Each written property has a single active writer in a given instance. A conflict between two clips, or between a clip and a driver, is a configuration error. Shared materials have per-instance state or copy-on-write. Two instances keep independent playback states.
+
+### 4.10. Weather (DRAFT)
+
+Precipitation, its direction and wind are simulated by the world. The model describes how its surfaces respond: getting wet, water runoff, snow accumulation, and draining water through eaves and gutters. The renderer draws the effect from this data; the model contains no shader code (section 3). A renderer without support for this section shows the materials unchanged.
+
+#### 4.10.1. Weather channels
+
+The `weather.*` channels are reserved. The world supplies them to every instance without additional configuration and may give an instance local values, e.g. zero under a canopy. The model may use them in any `source` field, e.g. `smoke_source.source: "weather.rain"`.
+
+| Channel | Type | Described value |
+| --- | --- | --- |
+| `weather.rain` | number [0,1] | Rain intensity: `min(rate_mm_h / 20, 1)`. |
+| `weather.snow` | number [0,1] | Snowfall intensity as water equivalent: `min(rate_mm_h / 5, 1)`. |
+| `weather.wetness` | number [0,1] | Wetness of an exposed surface: 0 dry, 1 full water film. |
+| `weather.snow_cover` | number [0,1] | Snow cover of an exposed horizontal surface. |
+| `weather.wind` | `vec3` | Wind velocity in m/s in the world coordinate system. |
+
+The build-up and decay of `weather.wetness` and `weather.snow_cover` (wetting, drying, melting) are computed by the world. The model holds no weather state.
+
+#### 4.10.2. Material response
+
+The optional `material.extras.weather` describes how a material responds to the weather channels:
+
+```json
+{
+  "semantic_id": "building.roof_tiles",
+  "weather": {
+    "wet": {"porosity": 0.6, "roughness": 0.1, "mask": {"index": 4}},
+    "runoff": {"flow": "slope", "speed": 1.1, "density": 6.0, "min_slope": 0.05},
+    "snow": {"max_slope": 0.8}
+  }
+}
+```
+
+| Key in `weather` | Described value | Example | Default value | Requirement |
+| --- | --- | --- | --- | --- |
+| `wet.porosity` | Porosity from 0 to 1; sets how much the base color darkens when wet. | `0.6` | `0.0` | Optional |
+| `wet.roughness` | Roughness of a surface covered by a water film, from 0 to 1. | `0.1` | `0.1` | Optional |
+| `wet.mask` | Mask texture: R exposure to precipitation, G susceptibility to standing water. | `{"index": 4}` | R = 1, G = 0 | Optional |
+| `runoff.flow` | Flow direction: `"slope"` or a direction texture. | `"slope"` | — | Required in `runoff` |
+| `runoff.speed` | Rivulet speed in m/s. | `1.1` | `1.0` | Optional |
+| `runoff.density` | Approximate number of rivulets per meter across the flow. | `6.0` | `4.0` | Optional |
+| `runoff.min_slope` | Smallest surface slope in radians at which rivulets form. | `0.05` | `0.02` | Optional |
+| `snow.max_slope` | Largest surface slope in radians on which snow settles. | `0.8` | `0.8` | Optional |
+| `snow.mask` | Mask texture: R whether snow can settle. | `{"index": 5}` | R = 1 | Optional |
+
+Texture fields are `textureInfo` objects (`index`, optional `texCoord`) sampled in linear space. The presence of `wet`, `runoff` or `snow` enables that effect.
+
+Wetness `w = weather.wetness × mask.R`. The base color RGB is multiplied by `1 − 0.6 × w × porosity`, and roughness is linearly interpolated from the material value to `wet.roughness` with weight `w`. Metalness does not change. A fragment with `mask.G` > 0 may be covered by standing water: a smooth surface with the geometric normal. At `weather.wetness` = 1 it covers every fragment with `mask.G` = 1. The renderer chooses the fill curve.
+
+Rivulets run along the flow direction. Their intensity is `weather.rain × mask.R`. With `flow: "slope"`, the direction is the projection of the world gravity vector onto the surface, so the runoff follows the instance placement. A direction texture encodes a unit direction in UV space in RG as `0.5 + 0.5 × direction`. On a surface sloped less than `min_slope` no rivulets form, while wetting still applies. The renderer may increase speed with slope.
+
+Snow covers fragments sloped no more than `max_slope`, with coverage `weather.snow_cover × snow.mask.R`. The appearance of snow, drops and rivulets is chosen by the renderer.
+
+Weather effects are applied in the order: wetting → rivulets → snow. They act on the resulting material values after `KHR_animation_pointer` animations and are not property writes in the sense of 4.9.1. Their state depends on instance channels, so a shared material follows the per-instance state rule of 4.9.1.
+
+#### 4.10.3. Water drainage
+
+An eave that drips water is described by `node.extras.drip_line`. The outlet of a gutter or downspout is described by `node.extras.water_outlet`. The water-collecting area is given by `catchment_m2` (horizontal projection in m²). The flow is `Q = 20 × x × catchment_m2 / 3 600 000` m³/s, where `x` is the value of the `source` channel.
+
+```json
+{
+  "semantic_id": "building.part_0.roof",
+  "drip_line": {
+    "edges": [
+      {"a": [-5.0, 3.1, 4.2], "b": [5.0, 3.1, 4.2], "outward": [0.0, 0.0, 1.0]}
+    ],
+    "catchment_m2": 42.0
+  }
+}
+```
+
+```json
+{
+  "semantic_id": "building.part_0.downspout.0",
+  "water_outlet": {
+    "catchment_m2": 42.0,
+    "diameter": 0.08,
+    "speed": 0.5
+  }
+}
+```
+
+| Key in `drip_line` | Described value | Example | Default value | Requirement |
+| --- | --- | --- | --- | --- |
+| `edges` | Eave segments in node coordinates: endpoints `a`, `b` and a horizontal unit flow direction `outward`. | as above | — | Required |
+| `catchment_m2` | Roof area drained by the whole line. | `42.0` | — | Required |
+| `material` | Drop material reference. | `"effects.drop"` | renderer material | Optional |
+| `source` | Intensity channel [0,1]. | `"weather.rain"` | `"weather.rain"` | Optional |
+
+| Key in `water_outlet` | Described value | Example | Default value | Requirement |
+| --- | --- | --- | --- | --- |
+| `catchment_m2` | Roof area drained to the outlet. | `42.0` | — | Required |
+| `diameter` | Outlet diameter in meters. | `0.08` | `0.08` | Optional |
+| `speed` | Initial water speed in m/s. | `0.5` | `0.5` | Optional |
+| `material` | Stream material reference. | `"effects.water"` | renderer material | Optional |
+| `source` | Intensity channel [0,1]. | `"weather.rain"` | `"weather.rain"` | Optional |
+
+The flow of an eave line is distributed evenly over the length of its segments. Drops detach at the edge in the `outward` direction. An eave with a gutter is not part of a `drip_line`; its water is drained by a `water_outlet`. The outlet releases a stream along the node's local +Y, like the emitter in 4.8. Drop and stream motion accounts for gravity and `weather.wind`, and their contact with the terrain is handled by the world. Hiding the node via `KHR_node_visibility` disables drainage.
+
+#### 4.10.4. Model scope
+
+The model does not describe falling precipitation, splashes or marks on the terrain around it; the world does that. The model contains no shader code, including for a selected engine, and no fixed precipitation intensity. A new kind of weather response enters the profile as a new key with parameters.
 
 ## 5. Export and validation
 
@@ -342,6 +449,8 @@ Profile validation checks:
 - assignment of `light_control` to a node with a light;
 - the value of `light_state` and the numeric value of `light_threshold`;
 - existence of the emitter material and positive lifetime limits;
+- ranges of `material.extras.weather` fields: `porosity` and `roughness` in [0,1], `min_slope` and `max_slope` in [0,π/2], existence of the referenced textures;
+- non-empty `edges` in `drip_line`, horizontal unit `outward`, positive `catchment_m2` in `drip_line` and `water_outlet`;
 - extension declarations, their constraints and importer capabilities.
 
 The profile version is independent of `asset.version`. `PATCH` clarifies the contract, `MINOR` adds optional capabilities, and `MAJOR` changes data interpretation. During the 0.x phase the importer explicitly negotiates every version.
