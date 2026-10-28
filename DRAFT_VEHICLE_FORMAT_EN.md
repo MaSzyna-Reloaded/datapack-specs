@@ -114,6 +114,7 @@ Channels are input values of a specific instance. The names in this document for
 | `pantograph.<n>.contact_height` | number, m | Target height of the contact point in the asset coordinate system |
 | `pantograph.<n>.raised` | bool | Raised state |
 | `engine.exhaust.<n>.output` | number [0,1] | Exhaust emission intensity |
+| `engine.heat` | number [0,1] | Engine heating level |
 | `wiper.<n>.phase` | number [0,1] | Wiper cycle phase |
 | `cab.<n>.occupied` | bool | Cab occupancy |
 | `display.destination.text` | string | Destination text |
@@ -320,7 +321,7 @@ All fields are required. Unicode text is rasterized into an sRGB image with a po
 
 Mechanical digits and gauge needles use `position` clips. Visibility of a load or a character may be bound to a channel via `visibility_control`; deformation and motion use clips, morphs or a skin.
 
-## 11. Exhaust and steam
+## 11. Exhaust, steam and engine heat
 
 The `vehicle.exhaust.<n>` emitter uses `smoke_source` from the common profile. The `engine.exhaust.<n>.output` channel modulates emission, and `inherit_velocity` defines the share of the emitter's velocity passed to particles at birth.
 
@@ -349,6 +350,24 @@ Example emitter configuration in `node.extras`:
 
 The emission position and direction inherit the body's motion. The emitter velocity includes the vehicle's translational motion and the point's motion resulting from rotation. Color and alpha come from the material; changes depending on load may be prepared by the author in a material parameter clip driven by a separate channel.
 
+Engine heat is described by `heat_source` from the common profile (4.11.2). Example in the `node.extras` of the engine compartment node:
+
+```json
+{
+  "semantic_id": "vehicle.engine",
+  "heat_source": {
+    "shape": "box",
+    "size": [2.0, 1.2, 3.0],
+    "falloff": 1.5,
+    "temperature": 60.0,
+    "source": "engine.heat",
+    "default": 0.0
+  }
+}
+```
+
+`temperature` is the temperature at full heating. The `engine.heat` channel is the heating multiplier, which the simulation computes from running time, load and time since shutdown; warming up and cooling down belong to the simulation. `default: 0.0` means a cold engine before the first update. The same channel may drive `material.extras.heat` of the engine cover material (4.11.1), so snow melts on the cover and under the vehicle. The region moves with the body.
+
 ## 12. Mapping authoring data to the format
 
 | Element prepared in Blender | Target data | Additional simulation contract |
@@ -364,6 +383,7 @@ The emission position and direction inherit the body's motion. The emitter veloc
 | Optional cab viewpoint | glTF camera and node | Driver position `semantic_id` |
 | Vehicle livery | `node.extras.replacable_texture` | Texture selection in the skin |
 | Exhaust outlet Empty | Transform node | `smoke_source` |
+| Engine compartment Empty | Transform node | `heat_source` with the `engine.heat` channel |
 
 Export MUST preserve nodes used as pivots, contact points and reference targets. The optimizer updates indices and JSON Pointers while preserving semantic IDs. The importer builds ID maps once while loading the asset.
 

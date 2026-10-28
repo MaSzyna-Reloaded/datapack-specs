@@ -182,7 +182,7 @@ Constant surface emission is stored in the material, optionally with [KHR_materi
 
 `emissiveTexture` is always rendered according to the material and is not used to switch lights on or off.
 
-The material's response to weather is described by the optional `material.extras.weather` (4.10.2).
+The material's response to weather is described by the optional `material.extras.weather` (4.10.2), and its surface temperature by `material.extras.heat` (4.11.1).
 
 ### 4.5. Replaceable textures
 
@@ -344,6 +344,7 @@ The `weather.*` channels are reserved. The world supplies them to every instance
 | `weather.wetness` | number [0,1] | Wetness of an exposed surface: 0 dry, 1 full water film. |
 | `weather.snow_cover` | number [0,1] | Snow cover of an exposed horizontal surface. |
 | `weather.wind` | `vec3` | Wind velocity in m/s in the world coordinate system. |
+| `weather.temperature` | number | Air temperature in °C. |
 
 The build-up and decay of `weather.wetness` and `weather.snow_cover` (wetting, drying, melting) are computed by the world. The model holds no weather state.
 
@@ -380,7 +381,7 @@ Wetness `w = weather.wetness × mask.R`. The base color RGB is multiplied by `1 
 
 Rivulets run along the flow direction. Their intensity is `weather.rain × mask.R`. With `flow: "slope"`, the direction is the projection of the world gravity vector onto the surface, so the runoff follows the instance placement. A direction texture encodes a unit direction in UV space in RG as `0.5 + 0.5 × direction`. On a surface sloped less than `min_slope` no rivulets form, while wetting still applies. The renderer may increase speed with slope.
 
-Snow covers fragments sloped no more than `max_slope`, with coverage `weather.snow_cover × snow.mask.R`. The appearance of snow, drops and rivulets is chosen by the renderer.
+Snow covers fragments sloped no more than `max_slope`, with coverage `weather.snow_cover × snow.mask.R`. Warm fragments (4.11.1) are excluded from the cover. The appearance of snow, drops and rivulets is chosen by the renderer.
 
 Weather effects are applied in the order: wetting → rivulets → snow. They act on the resulting material values after `KHR_animation_pointer` animations and are not property writes in the sense of 4.9.1. Their state depends on instance channels, so a shared material follows the per-instance state rule of 4.9.1.
 
@@ -432,6 +433,65 @@ The flow of an eave line is distributed evenly over the length of its segments. 
 
 The model does not describe falling precipitation, splashes or marks on the terrain around it; the world does that. The model contains no shader code, including for a selected engine, and no fixed precipitation intensity. A new kind of weather response enters the profile as a new key with parameters.
 
+### 4.11. Heat (DRAFT)
+
+A model may describe the temperature of its own surfaces and the heat it gives off to its surroundings. Temperatures are in degrees Celsius, and the air temperature `T_air` is given by the `weather.temperature` channel. The model does not simulate heat transfer: it describes sources, and the state of the surroundings is computed by the world.
+
+#### 4.11.1. Surface temperature
+
+The optional `material.extras.heat` describes warm areas of a material, e.g. a chimney, a boiler-room wall or an engine cover:
+
+```json
+{
+  "semantic_id": "building.chimney_wall",
+  "heat": {
+    "temperature": 45.0,
+    "mask": {"index": 6},
+    "source": "building.heating.level",
+    "default": 1.0
+  }
+}
+```
+
+| Key in `heat` | Described value | Example | Default value | Requirement |
+| --- | --- | --- | --- | --- |
+| `temperature` | Surface temperature at full heating, °C. | `45.0` | — | Required |
+| `mask` | Mask texture: R heat share at a given location. | `{"index": 6}` | R = 1 | Optional |
+| `source` | Heating level channel [0,1]. | `"building.heating.level"` | — | Optional |
+| `default` | Heating level before the first channel update or without `source`. | `1.0` | `1.0` | Optional |
+
+The fragment temperature is `T = T_air + mask.R × x × (temperature − T_air)`, where `x` is the value of the `source` channel. The mask is sampled in linear space. Snow from 4.10.2 does not settle on fragments warmer than 0 °C; the transition width is chosen by the renderer. The renderer may also reduce the wetness of warm fragments.
+
+#### 4.11.2. Heat sources in the surroundings
+
+`node.extras.heat_source` describes a region in which the model changes the temperature of its surroundings: ground, air and neighboring objects. The shape lies in node coordinates and moves with the node.
+
+```json
+{
+  "semantic_id": "building.boiler_room",
+  "heat_source": {
+    "shape": "box",
+    "size": [4.0, 3.0, 5.0],
+    "falloff": 2.5,
+    "temperature": 25.0,
+    "source": "building.heating.level",
+    "default": 1.0
+  }
+}
+```
+
+| Key in `heat_source` | Described value | Example | Default value | Requirement |
+| --- | --- | --- | --- | --- |
+| `shape` | Region shape: `"sphere"` or `"box"`. | `"box"` | — | Required |
+| `radius` | Sphere radius in meters. | `2.0` | — | Required for `sphere` |
+| `size` | Full box dimensions along the node axes, in meters. | `[4.0, 3.0, 5.0]` | — | Required for `box` |
+| `falloff` | Soft edge width in meters. | `2.5` | `1.0` | Optional |
+| `temperature` | Temperature inside the region at full heating, °C. | `25.0` | — | Required |
+| `source` | Heating level channel [0,1]. | `"building.heating.level"` | — | Optional |
+| `default` | Heating level before the first channel update or without `source`. | `1.0` | `1.0` | Optional |
+
+The influence weight is 1 inside the shape and falls smoothly (`smoothstep`) to 0 at distance `falloff` from its surface. The local ambient temperature is `T = T_air + Σ weight × x × (temperature − T_air)`, clamped to the interval spanned by `T_air` and the source temperatures. A temperature below `T_air` describes a cold source. The world may approximate sources on its own sampling grid, whose resolution it chooses; the result affects snow and drying in the surroundings like the air temperature does. Hiding the node via `KHR_node_visibility` disables the source. Dynamic models use the same fields, and the heating level is supplied by the simulation, e.g. through an `engine.heat` channel.
+
 ## 5. Export and validation
 
 1. The author prepares geometry, materials, lights, pivots and clips in the tool.
@@ -451,6 +511,7 @@ Profile validation checks:
 - existence of the emitter material and positive lifetime limits;
 - ranges of `material.extras.weather` fields: `porosity` and `roughness` in [0,1], `min_slope` and `max_slope` in [0,π/2], existence of the referenced textures;
 - non-empty `edges` in `drip_line`, horizontal unit `outward`, positive `catchment_m2` in `drip_line` and `water_outlet`;
+- finite `temperature` in `heat` and `heat_source`, `shape` consistent with a positive `radius` or `size`, non-negative `falloff`;
 - extension declarations, their constraints and importer capabilities.
 
 The profile version is independent of `asset.version`. `PATCH` clarifies the contract, `MINOR` adds optional capabilities, and `MAJOR` changes data interpretation. During the 0.x phase the importer explicitly negotiates every version.

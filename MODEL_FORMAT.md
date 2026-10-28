@@ -182,7 +182,7 @@ Stała emisja powierzchni jest zapisana w materiale, z opcjonalnym [KHR_material
 
 `emissiveTexture` jest zawsze renderowana zgodnie z materiałem i nie służy do włączania ani wyłączania świateł.
 
-Reakcję materiału na pogodę opisuje opcjonalne `material.extras.weather` (4.10.2).
+Reakcję materiału na pogodę opisuje opcjonalne `material.extras.weather` (4.10.2), a temperaturę powierzchni `material.extras.heat` (4.11.1).
 
 ### 4.5. Wymienne tekstury
 
@@ -344,6 +344,7 @@ Kanały `weather.*` są zarezerwowane. Świat dostarcza je każdej instancji bez
 | `weather.wetness` | liczba [0,1] | Zmoczenie odsłoniętej powierzchni: 0 sucha, 1 pełny film wody. |
 | `weather.snow_cover` | liczba [0,1] | Pokrycie śniegiem odsłoniętej powierzchni poziomej. |
 | `weather.wind` | `vec3` | Prędkość wiatru w m/s w układzie świata. |
+| `weather.temperature` | liczba | Temperatura powietrza w °C. |
 
 Narastanie i zanikanie `weather.wetness` oraz `weather.snow_cover` (moknięcie, schnięcie, topnienie) oblicza świat. Model nie przechowuje stanu pogody.
 
@@ -380,7 +381,7 @@ Zmoczenie `w = weather.wetness × mask.R`. Kolor bazowy RGB jest mnożony przez 
 
 Strużki płyną wzdłuż kierunku spływu. Ich natężenie wynosi `weather.rain × mask.R`. Przy `flow: "slope"` kierunkiem jest rzut światowego wektora grawitacji na powierzchnię, więc spływ odpowiada położeniu instancji. Tekstura kierunku koduje w RG jednostkowy kierunek w przestrzeni UV jako `0.5 + 0.5 × kierunek`. Na powierzchni o nachyleniu mniejszym niż `min_slope` strużki nie powstają, a zmoczenie działa nadal. Renderer może zwiększać prędkość wraz z nachyleniem.
 
-Śnieg pokrywa fragmenty o nachyleniu nie większym niż `max_slope`, z udziałem `weather.snow_cover × snow.mask.R`. Wygląd śniegu, kropli i strużek dobiera renderer.
+Śnieg pokrywa fragmenty o nachyleniu nie większym niż `max_slope`, z udziałem `weather.snow_cover × snow.mask.R`. Ciepłe fragmenty (4.11.1) są wyłączone z pokrycia. Wygląd śniegu, kropli i strużek dobiera renderer.
 
 Efekty pogodowe są nakładane w kolejności: zmoczenie → strużki → śnieg. Działają na wynikowych wartościach materiału po animacjach `KHR_animation_pointer` i nie są zapisem właściwości w rozumieniu 4.9.1. Ich stan zależy od kanałów instancji, więc współdzielony materiał podlega regule stanu instancji z 4.9.1.
 
@@ -432,6 +433,65 @@ Przepływ linii okapu rozkłada się równomiernie na długość jej odcinków. 
 
 Model nie opisuje spadającego opadu, rozbryzgów ani śladów na terenie wokół siebie; robi to świat. Model nie zawiera kodu shaderów, także dla wybranego silnika, ani stałego natężenia opadu. Nowy rodzaj reakcji na pogodę wchodzi do profilu jako nowy klucz z parametrami.
 
+### 4.11. Ciepło (DRAFT)
+
+Model może opisać temperaturę własnych powierzchni oraz ciepło oddawane do otoczenia. Temperatury są w stopniach Celsjusza, a temperaturę powietrza `T_air` podaje kanał `weather.temperature`. Model nie symuluje wymiany ciepła: opisuje źródła, a stan otoczenia oblicza świat.
+
+#### 4.11.1. Temperatura powierzchni
+
+Opcjonalne `material.extras.heat` opisuje ciepłe miejsca materiału, np. komin, ścianę kotłowni albo pokrywę silnika:
+
+```json
+{
+  "semantic_id": "building.chimney_wall",
+  "heat": {
+    "temperature": 45.0,
+    "mask": {"index": 6},
+    "source": "building.heating.level",
+    "default": 1.0
+  }
+}
+```
+
+| Klucz w `heat` | Opisana wartość | Przykład | Domyślna wartość | Wymaganie |
+| --- | --- | --- | --- | --- |
+| `temperature` | Temperatura powierzchni przy pełnym ogrzaniu, °C. | `45.0` | — | Wymagane |
+| `mask` | Tekstura maski: R udział ciepła w danym miejscu. | `{"index": 6}` | R = 1 | Opcjonalne |
+| `source` | Kanał [0,1] poziomu ogrzania. | `"building.heating.level"` | — | Opcjonalne |
+| `default` | Poziom ogrzania przed pierwszą aktualizacją kanału albo bez `source`. | `1.0` | `1.0` | Opcjonalne |
+
+Temperatura fragmentu wynosi `T = T_air + mask.R × x × (temperature − T_air)`, gdzie `x` to wartość kanału `source`. Maska jest próbkowana w przestrzeni liniowej. Śnieg z 4.10.2 nie zalega na fragmentach cieplejszych niż 0 °C; szerokość przejścia dobiera renderer. Renderer może też zmniejszać zmoczenie ciepłych fragmentów.
+
+#### 4.11.2. Źródła ciepła w otoczeniu
+
+`node.extras.heat_source` opisuje obszar, w którym model zmienia temperaturę otoczenia: gruntu, powietrza i sąsiednich obiektów. Kształt leży w układzie węzła i porusza się razem z nim.
+
+```json
+{
+  "semantic_id": "building.boiler_room",
+  "heat_source": {
+    "shape": "box",
+    "size": [4.0, 3.0, 5.0],
+    "falloff": 2.5,
+    "temperature": 25.0,
+    "source": "building.heating.level",
+    "default": 1.0
+  }
+}
+```
+
+| Klucz w `heat_source` | Opisana wartość | Przykład | Domyślna wartość | Wymaganie |
+| --- | --- | --- | --- | --- |
+| `shape` | Kształt obszaru: `"sphere"` albo `"box"`. | `"box"` | — | Wymagane |
+| `radius` | Promień kuli w metrach. | `2.0` | — | Wymagane dla `sphere` |
+| `size` | Pełne wymiary prostopadłościanu wzdłuż osi węzła, w metrach. | `[4.0, 3.0, 5.0]` | — | Wymagane dla `box` |
+| `falloff` | Szerokość miękkiej krawędzi w metrach. | `2.5` | `1.0` | Opcjonalne |
+| `temperature` | Temperatura wnętrza obszaru przy pełnym ogrzaniu, °C. | `25.0` | — | Wymagane |
+| `source` | Kanał [0,1] poziomu ogrzania. | `"building.heating.level"` | — | Opcjonalne |
+| `default` | Poziom ogrzania przed pierwszą aktualizacją kanału albo bez `source`. | `1.0` | `1.0` | Opcjonalne |
+
+Waga wpływu wynosi 1 wewnątrz kształtu i maleje płynnie (`smoothstep`) do 0 w odległości `falloff` od jego powierzchni. Lokalna temperatura otoczenia to `T = T_air + Σ waga × x × (temperature − T_air)`, ograniczona do przedziału wyznaczonego przez `T_air` i temperatury źródeł. Temperatura poniżej `T_air` opisuje źródło chłodu. Świat może przybliżać źródła na własnej siatce próbkowania, której rozdzielczość dobiera; wynik wpływa na śnieg i schnięcie w otoczeniu tak jak temperatura powietrza. Ukrycie węzła przez `KHR_node_visibility` wyłącza źródło. Modele dynamiczne używają tych samych pól, a poziom ogrzania podaje symulacja, np. kanałem `engine.heat`.
+
 ## 5. Eksport i walidacja
 
 1. Autor przygotowuje geometrię, materiały, światła, pivoty i klipy w narzędziu.
@@ -451,6 +511,7 @@ Walidacja profilu sprawdza:
 - istnienie materiału emitera i dodatnie limity jego życia;
 - zakresy pól `material.extras.weather`: `porosity` i `roughness` w [0,1], `min_slope` i `max_slope` w [0,π/2], istnienie wskazanych tekstur;
 - niepuste `edges` w `drip_line`, poziome jednostkowe `outward`, dodatnie `catchment_m2` w `drip_line` i `water_outlet`;
+- skończone `temperature` w `heat` i `heat_source`, `shape` zgodny z `radius` albo `size` o dodatnich wartościach, nieujemne `falloff`;
 - deklaracje rozszerzeń, ich ograniczenia i możliwości importera.
 
 Wersja profilu jest niezależna od `asset.version`. `PATCH` doprecyzowuje kontrakt, `MINOR` dodaje opcjonalne możliwości, a `MAJOR` zmienia interpretację danych. W fazie 0.x importer jawnie negocjuje każdą wersję.

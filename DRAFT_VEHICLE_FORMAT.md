@@ -114,6 +114,7 @@ Kanały są wartościami wejściowymi konkretnej instancji. Nazwy w tym dokumenc
 | `pantograph.<n>.contact_height` | number, m | Zadana wysokość punktu kontaktu w układzie assetu |
 | `pantograph.<n>.raised` | bool | Stan podniesienia |
 | `engine.exhaust.<n>.output` | number [0,1] | Intensywność emisji spalin |
+| `engine.heat` | number [0,1] | Poziom nagrzania silnika |
 | `wiper.<n>.phase` | number [0,1] | Faza cyklu wycieraczki |
 | `cab.<n>.occupied` | bool | Zajęcie kabiny |
 | `display.destination.text` | string | Tekst kierunku |
@@ -320,7 +321,7 @@ Wszystkie pola są wymagane. Tekst Unicode jest rasteryzowany do obrazu sRGB o d
 
 Cyfry mechaniczne i wskazówki korzystają z klipów `position`. Widoczność ładunku lub postaci może być związana z kanałem przez `visibility_control`; deformacja i ruch korzystają z klipów, morphów albo skinu.
 
-## 11. Spaliny i para
+## 11. Spaliny, para i ciepło silnika
 
 Emiter `vehicle.exhaust.<n>` używa `smoke_source` z profilu wspólnego. Kanał `engine.exhaust.<n>.output` moduluje emisję, a `inherit_velocity` określa udział prędkości emitera przekazywany cząstkom przy narodzinach.
 
@@ -349,6 +350,24 @@ Przykład konfiguracji emitera w `node.extras`:
 
 Pozycja i kierunek emisji dziedziczą ruch pudła. Prędkość emitera obejmuje ruch postępowy pojazdu i ruch punktu wynikający z obrotu. Kolor i alpha pochodzą z materiału; zmiany wynikające z obciążenia mogą być przygotowane przez autora w klipie parametrów materiału sterowanym osobnym kanałem.
 
+Ciepło silnika opisuje `heat_source` z profilu wspólnego (4.11.2). Przykład w `node.extras` węzła komory silnika:
+
+```json
+{
+  "semantic_id": "vehicle.engine",
+  "heat_source": {
+    "shape": "box",
+    "size": [2.0, 1.2, 3.0],
+    "falloff": 1.5,
+    "temperature": 60.0,
+    "source": "engine.heat",
+    "default": 0.0
+  }
+}
+```
+
+`temperature` to temperatura przy pełnym nagrzaniu. Kanał `engine.heat` jest mnożnikiem nagrzania, który symulacja liczy z czasu pracy, obciążenia i czasu od wyłączenia; nagrzewanie i stygnięcie należą do symulacji. `default: 0.0` oznacza zimny silnik przed pierwszą aktualizacją. Ten sam kanał może sterować `material.extras.heat` materiału pokrywy silnika (4.11.1), dzięki czemu śnieg topnieje na pokrywie i pod pojazdem. Obszar porusza się razem z pudłem.
+
 ## 12. Mapa danych autorskich do formatu
 
 | Element przygotowany w Blenderze | Dane docelowe | Dodatkowy kontrakt symulacji |
@@ -364,6 +383,7 @@ Pozycja i kierunek emisji dziedziczą ruch pudła. Prędkość emitera obejmuje 
 | Opcjonalny punkt obserwatora kabiny | Kamera glTF i node | `semantic_id` stanowiska |
 | Malowanie pojazdu | `node.extras.replacable_texture` | Wybór tekstur w skinie |
 | Empty wylotu spalin | Node transformacyjny | `smoke_source` |
+| Empty komory silnika | Node transformacyjny | `heat_source` z kanałem `engine.heat` |
 
 Eksport MUST zachować node'y używane jako pivoty, punkty kontaktu i cele referencji. Optymalizator aktualizuje indeksy i JSON Pointer, zachowując semantyczne ID. Importer tworzy mapy ID raz podczas ładowania assetu.
 
