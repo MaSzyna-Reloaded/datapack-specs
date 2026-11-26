@@ -14,7 +14,7 @@ Dokument definiuje kontrakt docelowy. Zgodność implementacji jest sprawdzana d
 
 Model jest zapisany jako poprawny plik glTF 2.0: `.gltf` z zasobami albo `.glb`. Zewnętrzne adresy URI zasobów są względne wobec pliku glTF. Pakiet zawiera wszystkie zależności. Plik GLB może również mieć zależności zewnętrzne, które pakowarka rozwiązuje tak samo.
 
-Profil przyjmuje metry, sekundy i radiany. Model ma jedną domyślną scenę z jednym korzeniem reprezentującym cały obiekt. Układ modelu: +Y w górę, +Z przód obiektu, +X w lewo z perspektywy patrzącego w kierunku +Z. Eksporter przelicza układ narzędzia autorskiego do tego układu.
+Profil przyjmuje metry, sekundy i radiany. Model ma jedną domyślną scenę z jednym korzeniem reprezentującym cały obiekt. Układ modelu: +Y w górę, +Z przód obiektu, +X w lewo z perspektywy patrzącego w kierunku +Z. Eksporter przelicza układ narzędzia autorskiego do tego układu. Model może też stać w innych osiach, jeśli deklaruje je nagłówek (`forward_axis`, `left_axis`, `up_axis`, 4.1); importer obraca go wtedy do układu profilu. Bez deklaracji obowiązuje układ profilu, który pozostaje zalecany.
 
 Przekształcenie korzenia w pliku jest jednostkowe. Przekształcenie umieszczenia instancji przechowuje świat. Światła kierunkowe i kamery zachowują własne konwencje osi glTF. Ruchome węzły używają TRS z prawidłowo ustawionym punktem obrotu. Skala mechanizmów jest wypieczona przed eksportem.
 
@@ -79,6 +79,9 @@ Przykład nagłówka `asset`:
 | `osm` | Tagi opisujące model. | `{"natural":"tree"}` | Opcjonalne |
 | `geo` | Położenie i orientacja geograficzna modelu. | `{"lat":54.3520,"lng":18.6466,"elevation":12.5,"heading":90.0}` | Opcjonalne |
 | `t3d` | Dane zgodności z T3D/E3D. | `{"skins":["body","cab"]}` | Opcjonalne |
+| `forward_axis` | Oś glTF, w którą zwrócony jest przód modelu: `"+X"`, `"-X"`, `"+Y"`, `"-Y"`, `"+Z"`, `"-Z"`. | `"+X"` | Opcjonalne; domyślnie `"+Z"` |
+| `left_axis` | Oś glTF, w którą zwrócona jest lewa strona modelu, z tych samych wartości. | `"-Z"` | Opcjonalne; domyślnie `"+X"` |
+| `up_axis` | Oś glTF, w którą zwrócona jest góra modelu, z tych samych wartości. | `"+Y"` | Opcjonalne; domyślnie `"+Y"` |
 
 
 `extras.semantic_id` w węzłach, materiałach i animacjach identyfikuje elementy używane przez symulację. Wartości są unikalne w obrębie danej kolekcji modelu i stabilne przy ponownym eksporcie. Typ referencji wynika z pola: `node` wskazuje węzeł, `material` materiał, a `animation` klip. Wartością jest zawsze `semantic_id` docelowego obiektu.
@@ -503,6 +506,7 @@ Waga wpływu wynosi 1 wewnątrz kształtu i maleje płynnie (`smoothstep`) do 0 
 Walidacja profilu sprawdza:
 
 - nagłówek, wersję, jednostkowy korzeń i rozwiązywalność zasobów;
+- zadeklarowane osie: wzajemnie prostopadłe, lewo = góra × przód, jak w układzie profilu;
 - unikalność ID oraz typ i cel każdej referencji;
 - zakresy wartości w opcjonalnym `geo`;
 - typy kanałów, zakresy liczb i pojedynczego autora właściwości;
