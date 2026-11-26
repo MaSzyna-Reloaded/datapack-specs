@@ -14,7 +14,7 @@ Dokument definiuje kontrakt docelowy. Zgodność implementacji jest sprawdzana d
 
 Model jest zapisany jako poprawny plik glTF 2.0: `.gltf` z zasobami albo `.glb`. Zewnętrzne adresy URI zasobów są względne wobec pliku glTF. Pakiet zawiera wszystkie zależności. Plik GLB może również mieć zależności zewnętrzne, które pakowarka rozwiązuje tak samo.
 
-Profil przyjmuje metry, sekundy i radiany. Model ma jedną domyślną scenę z jednym korzeniem reprezentującym cały obiekt. Układ modelu: +Y w górę, +Z przód obiektu, +X w lewo z perspektywy patrzącego w kierunku +Z. Eksporter przelicza układ narzędzia autorskiego do tego układu.
+Profil przyjmuje metry, sekundy i radiany. Model ma jedną domyślną scenę z jednym korzeniem reprezentującym cały obiekt. Układ modelu: +Y w górę, +Z przód obiektu, +X w lewo z perspektywy patrzącego w kierunku +Z. Eksporter przelicza układ narzędzia autorskiego do tego układu. Model może też stać w innych osiach, jeśli deklaruje je nagłówek (`forward_axis`, `left_axis`, `up_axis`, 4.1); importer obraca go wtedy do układu profilu. Bez deklaracji obowiązuje układ profilu, który pozostaje zalecany.
 
 Przekształcenie korzenia w pliku jest jednostkowe. Przekształcenie umieszczenia instancji przechowuje świat. Światła kierunkowe i kamery zachowują własne konwencje osi glTF. Ruchome węzły używają TRS z prawidłowo ustawionym punktem obrotu. Skala mechanizmów jest wypieczona przed eksportem.
 
@@ -79,6 +79,9 @@ Przykład nagłówka `asset`:
 | `osm` | Tagi opisujące model. | `{"natural":"tree"}` | Opcjonalne |
 | `geo` | Położenie i orientacja geograficzna modelu. | `{"lat":54.3520,"lng":18.6466,"elevation":12.5,"heading":90.0}` | Opcjonalne |
 | `t3d` | Dane zgodności z T3D/E3D. | `{"skins":["body","cab"]}` | Opcjonalne |
+| `forward_axis` | Oś glTF, w którą zwrócony jest przód modelu: `"+X"`, `"-X"`, `"+Y"`, `"-Y"`, `"+Z"`, `"-Z"`. | `"+X"` | Opcjonalne; domyślnie `"+Z"` |
+| `left_axis` | Oś glTF, w którą zwrócona jest lewa strona modelu, z tych samych wartości. | `"-Z"` | Opcjonalne; domyślnie `"+X"` |
+| `up_axis` | Oś glTF, w którą zwrócona jest góra modelu, z tych samych wartości. | `"+Y"` | Opcjonalne; domyślnie `"+Y"` |
 
 
 `extras.semantic_id` w węzłach, materiałach i animacjach identyfikuje elementy używane przez symulację. Wartości są unikalne w obrębie danej kolekcji modelu i stabilne przy ponownym eksporcie. Typ referencji wynika z pola: `node` wskazuje węzeł, `material` materiał, a `animation` klip. Wartością jest zawsze `semantic_id` docelowego obiektu.
@@ -186,7 +189,13 @@ Reakcję materiału na pogodę opisuje opcjonalne `material.extras.weather` (4.1
 
 ### 4.5. Wymienne tekstury
 
-Model zawiera domyślne materiały i tekstury glTF. Zestaw wymiennych tekstur jest mapą ich nazw na zasoby, np. `{"body":"skins/red/body.png"}`. Podmienia wskazane części modelu; pozostałe używają tekstur domyślnych. Opcjonalne `asset.extras.t3d.skins` mapuje numery starszego formatu na te nazwy, bez mieszania ich z numerami materiałów glTF.
+Model zawiera domyślne materiały i tekstury glTF. Zestaw wymiennych tekstur jest mapą ich nazw na zasoby, np. `{"body":"skins/red/body.png"}`. Podmienia wskazane części modelu; pozostałe używają tekstur domyślnych. Slot może też podawać osobno kolor bazowy, teksturę ORM i mapę normalnych: `{"body":{"base_color":"skins/red/body_col.png","orm":"skins/red/body_orm.png","normal":"skins/red/body_nrm.png"}}`; każda z nich jest opcjonalna, a sama ścieżka oznacza kolor bazowy.
+
+| Tekstura slotu | Użycie kanałów | Przestrzeń barw |
+|---|---|---|
+| `base_color` | RGB: kolor bazowy; A: przezroczystość | sRGB |
+| `orm` | R: okluzja otoczenia; G: chropowatość; B: metaliczność | liniowa |
+| `normal` | RGB: normalna w przestrzeni stycznej | liniowa | Opcjonalne `asset.extras.t3d.skins` mapuje numery starszego formatu na te nazwy, bez mieszania ich z numerami materiałów glTF.
 
 | Klucz w `asset.extras.t3d` | Opisana wartość | Przykład | Wymaganie |
 |---|---|---|---|
@@ -195,6 +204,10 @@ Model zawiera domyślne materiały i tekstury glTF. Zestaw wymiennych tekstur je
 | Klucz w `node.extras` | Opisana wartość | Przykład | Wymaganie |
 |---|---|---|---|
 | `replacable_texture` | Nazwa wymiennej tekstury części modelu reprezentowanej przez węzeł. | `"body"` | Opcjonalne; obecne dla części z wymienną teksturą |
+
+| Klucz w `material.extras` | Opisana wartość | Przykład | Wymaganie |
+|---|---|---|---|
+| `replacable_texture` | Nazwa wymiennej tekstury materiału: każda powierzchnia z tym materiałem przyjmuje tekstury slotu, niezależnie od węzła, który ją rysuje. Służy siatkom łączącym części kilku slotów, np. wnętrzu ze ścianami, ławkami i podłogą w jednej siatce. | `"interior_wall"` | Opcjonalne |
 
 ### 4.6. Warstwy świateł
 
@@ -503,6 +516,7 @@ Waga wpływu wynosi 1 wewnątrz kształtu i maleje płynnie (`smoothstep`) do 0 
 Walidacja profilu sprawdza:
 
 - nagłówek, wersję, jednostkowy korzeń i rozwiązywalność zasobów;
+- zadeklarowane osie: wzajemnie prostopadłe, lewo = góra × przód, jak w układzie profilu;
 - unikalność ID oraz typ i cel każdej referencji;
 - zakresy wartości w opcjonalnym `geo`;
 - typy kanałów, zakresy liczb i pojedynczego autora właściwości;

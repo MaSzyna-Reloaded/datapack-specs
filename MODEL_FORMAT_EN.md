@@ -14,7 +14,7 @@ This document defines the target contract. Implementation conformance is checked
 
 A model is stored as a valid glTF 2.0 file: `.gltf` with its resources, or `.glb`. External resource URIs are relative to the glTF file. The package contains all dependencies. A GLB file may also have external dependencies, which the packer resolves in the same way.
 
-The profile uses meters, seconds and radians. A model has a single default scene with a single root representing the whole object. Model coordinate system: +Y up, +Z object front, +X to the left from the perspective of a viewer looking towards +Z. The exporter converts the authoring tool's coordinate system to this one.
+The profile uses meters, seconds and radians. A model has a single default scene with a single root representing the whole object. Model coordinate system: +Y up, +Z object front, +X to the left from the perspective of a viewer looking towards +Z. The exporter converts the authoring tool's coordinate system to this one. A model may also stand along other axes when its header declares them (`forward_axis`, `left_axis`, `up_axis`, 4.1); the importer then turns it into the profile's system. Without them the profile's system applies, and it stays the recommended one.
 
 The root transform in the file is identity. The instance placement transform holds the world transform. Directional lights and cameras keep their own glTF axis conventions. Moving nodes use TRS with a correctly placed pivot. Mechanism scale is baked before export.
 
@@ -79,6 +79,9 @@ Example `asset` header:
 | `osm` | Tags describing the model. | `{"natural":"tree"}` | Optional |
 | `geo` | Geographic position and orientation of the model. | `{"lat":54.3520,"lng":18.6466,"elevation":12.5,"heading":90.0}` | Optional |
 | `t3d` | T3D/E3D compatibility data. | `{"skins":["body","cab"]}` | Optional |
+| `forward_axis` | glTF axis the model's front faces along: `"+X"`, `"-X"`, `"+Y"`, `"-Y"`, `"+Z"`, `"-Z"`. | `"+X"` | Optional; `"+Z"` by default |
+| `left_axis` | glTF axis the model's left side faces along, of the same values. | `"-Z"` | Optional; `"+X"` by default |
+| `up_axis` | glTF axis the model's top faces along, of the same values. | `"+Y"` | Optional; `"+Y"` by default |
 
 
 `extras.semantic_id` on nodes, materials and animations identifies elements used by the simulation. Values are unique within the given model collection and stable across re-exports. The reference type follows from the field: `node` points to a node, `material` to a material, and `animation` to a clip. The value is always the `semantic_id` of the target object.
@@ -186,7 +189,13 @@ The material's response to weather is described by the optional `material.extras
 
 ### 4.5. Replaceable textures
 
-The model contains default glTF materials and textures. A set of replaceable textures is a map from their names to resources, e.g. `{"body":"skins/red/body.png"}`. It replaces the specified parts of the model; the others use the default textures. The optional `asset.extras.t3d.skins` maps legacy format numbers to these names, without mixing them with glTF material numbers.
+The model contains default glTF materials and textures. A set of replaceable textures is a map from their names to resources, e.g. `{"body":"skins/red/body.png"}`. It replaces the specified parts of the model; the others use the default textures. A slot may also give its base colour, ORM texture and normal map separately: `{"body":{"base_color":"skins/red/body_col.png","orm":"skins/red/body_orm.png","normal":"skins/red/body_nrm.png"}}`; each of them is optional, and a bare path stands for the base colour.
+
+| Slot texture | Channel usage | Color space |
+|---|---|---|
+| `base_color` | RGB: base color; A: transparency | sRGB |
+| `orm` | R: ambient occlusion; G: roughness; B: metalness | linear |
+| `normal` | RGB: tangent-space normal | linear | The optional `asset.extras.t3d.skins` maps legacy format numbers to these names, without mixing them with glTF material numbers.
 
 | Key in `asset.extras.t3d` | Described value | Example | Requirement |
 |---|---|---|---|
@@ -195,6 +204,10 @@ The model contains default glTF materials and textures. A set of replaceable tex
 | Key in `node.extras` | Described value | Example | Requirement |
 |---|---|---|---|
 | `replacable_texture` | Name of the replaceable texture of the model part represented by the node. | `"body"` | Optional; present for parts with a replaceable texture |
+
+| Key in `material.extras` | Described value | Example | Requirement |
+|---|---|---|---|
+| `replacable_texture` | Name of the material's replaceable texture: every surface of the material takes the slot's textures, whichever node draws it. It serves meshes joining parts of several slots, e.g. an interior with walls, benches and floor in one mesh. | `"interior_wall"` | Optional |
 
 ### 4.6. Light layers
 
@@ -503,6 +516,7 @@ The influence weight is 1 inside the shape and falls smoothly (`smoothstep`) to 
 Profile validation checks:
 
 - the header, version, identity root and resolvability of resources;
+- declared axes: mutually perpendicular, left = up × forward, as in the profile's system;
 - ID uniqueness and the type and target of each reference;
 - value ranges in the optional `geo`;
 - channel types, numeric ranges and the single writer of each property;
