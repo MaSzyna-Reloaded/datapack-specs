@@ -189,7 +189,13 @@ Reakcję materiału na pogodę opisuje opcjonalne `material.extras.weather` (4.1
 
 ### 4.5. Wymienne tekstury
 
-Model zawiera domyślne materiały i tekstury glTF. Zestaw wymiennych tekstur jest mapą ich nazw na zasoby, np. `{"body":"skins/red/body.png"}`. Podmienia wskazane części modelu; pozostałe używają tekstur domyślnych. Opcjonalne `asset.extras.t3d.skins` mapuje numery starszego formatu na te nazwy, bez mieszania ich z numerami materiałów glTF.
+Model zawiera domyślne materiały i tekstury glTF. Zestaw wymiennych tekstur jest mapą ich nazw na zasoby, np. `{"body":"skins/red/body.png"}`. Podmienia wskazane części modelu; pozostałe używają tekstur domyślnych. Slot może też podawać osobno kolor bazowy, teksturę ORM i mapę normalnych: `{"body":{"base_color":"skins/red/body_col.png","orm":"skins/red/body_orm.png","normal":"skins/red/body_nrm.png"}}`; każda z nich jest opcjonalna, a sama ścieżka oznacza kolor bazowy.
+
+| Tekstura slotu | Użycie kanałów | Przestrzeń barw |
+|---|---|---|
+| `base_color` | RGB: kolor bazowy; A: przezroczystość | sRGB |
+| `orm` | R: okluzja otoczenia; G: chropowatość; B: metaliczność | liniowa |
+| `normal` | RGB: normalna w przestrzeni stycznej | liniowa | Opcjonalne `asset.extras.t3d.skins` mapuje numery starszego formatu na te nazwy, bez mieszania ich z numerami materiałów glTF.
 
 | Klucz w `asset.extras.t3d` | Opisana wartość | Przykład | Wymaganie |
 |---|---|---|---|
@@ -198,6 +204,10 @@ Model zawiera domyślne materiały i tekstury glTF. Zestaw wymiennych tekstur je
 | Klucz w `node.extras` | Opisana wartość | Przykład | Wymaganie |
 |---|---|---|---|
 | `replacable_texture` | Nazwa wymiennej tekstury części modelu reprezentowanej przez węzeł. | `"body"` | Opcjonalne; obecne dla części z wymienną teksturą |
+
+| Klucz w `material.extras` | Opisana wartość | Przykład | Wymaganie |
+|---|---|---|---|
+| `replacable_texture` | Nazwa wymiennej tekstury materiału: każda powierzchnia z tym materiałem przyjmuje tekstury slotu, niezależnie od węzła, który ją rysuje. Służy siatkom łączącym części kilku slotów, np. wnętrzu ze ścianami, ławkami i podłogą w jednej siatce. | `"interior_wall"` | Opcjonalne |
 
 ### 4.6. Warstwy świateł
 
