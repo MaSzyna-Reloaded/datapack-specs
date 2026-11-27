@@ -492,6 +492,19 @@ The fragment temperature is `T = T_air + mask.R × x × (temperature − T_air)`
 
 The influence weight is 1 inside the shape and falls smoothly (`smoothstep`) to 0 at distance `falloff` from its surface. The local ambient temperature is `T = T_air + Σ weight × x × (temperature − T_air)`, clamped to the interval spanned by `T_air` and the source temperatures. A temperature below `T_air` describes a cold source. The world may approximate sources on its own sampling grid, whose resolution it chooses; the result affects snow and drying in the surroundings like the air temperature does. Hiding the node via `KHR_node_visibility` disables the source. Dynamic models use the same fields, and the heating level is supplied by the simulation, e.g. through an `engine.heat` channel.
 
+### 4.12. Collisions (DRAFT)
+
+A model may carry collision shapes. They are optional: a model without them is drawn and simulated as before. Shapes use [OMI_physics_shape](https://github.com/omigroup/gltf-extensions/tree/main/extensions/2.0/OMI_physics_shape) (document level: `box`, `sphere`, `capsule`, `cylinder`, `convex`, `trimesh`), placed by nodes with [OMI_physics_body](https://github.com/omigroup/gltf-extensions/tree/main/extensions/2.0/OMI_physics_body) whose `motion.type` is `static` or `kinematic`. Collision nodes carry no mesh and are not drawn.
+
+The body node's `extras.semantic_id` gives its role:
+
+| `semantic_id` | Role |
+|---|---|
+| `<object>.collision.body` | The object's outer volume, e.g. one box |
+| `<object>.collision.interior` | What a person inside collides with: floor, inner walls, partitions |
+
+`<object>` is the model's kind, e.g. `vehicle` (see the [dynamic models](DRAFT_VEHICLE_FORMAT_EN.md) catalog). A collision body under a node moved by a clip or a procedural driver (a door's `…opening`, a flap) moves with that node's pose.
+
 ## 5. Export and validation
 
 1. The author prepares geometry, materials, lights, pivots and clips in the tool.
@@ -520,4 +533,5 @@ The profile version is independent of `asset.version`. `PATCH` clarifies the con
 
 - [glTF 2.0](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html).
 - [Extension registry](https://github.com/KhronosGroup/glTF/blob/main/extensions/README.md).
+- [OMI glTF extensions](https://github.com/omigroup/gltf-extensions) — `OMI_physics_shape`, `OMI_physics_body`.
 - [Blender light exporter](https://github.com/blender/blender-addons/blob/main/io_scene_gltf2/blender/exp/gltf2_blender_gather_lights.py) — an example implementation of the conversion; the processing pipeline pins a specific exporter version.

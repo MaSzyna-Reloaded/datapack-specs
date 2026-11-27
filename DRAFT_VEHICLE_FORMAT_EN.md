@@ -58,6 +58,8 @@ Every independently moving element has a node whose pivot is at its point of rot
 | `vehicle.hose.<end>.<system>.<side>` | Pneumatic hose |
 | `vehicle.control_cable.<end>` | Control cable |
 | `vehicle.gangway.<end>` | Gangway |
+| `vehicle.collision.body` | Collision shape of the outer volume (common profile §4.12) |
+| `vehicle.collision.interior` | Collision shapes of the interior: floor, inner walls, partitions (common profile §4.12) |
 | `vehicle.buffer.<end>.<side>` | Buffer |
 | `vehicle.pantograph.<n>` | Pantograph assembly |
 | `vehicle.cab.<n>` | Cab assembly |

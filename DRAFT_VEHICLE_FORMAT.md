@@ -58,6 +58,8 @@ Każdy niezależnie poruszany element ma node o pivocie w miejscu jego obrotu al
 | `vehicle.hose.<end>.<system>.<side>` | Przewód pneumatyczny |
 | `vehicle.control_cable.<end>` | Przewód sterowania |
 | `vehicle.gangway.<end>` | Przejście międzywagonowe |
+| `vehicle.collision.body` | Kształt kolizji zewnętrznej bryły (profil wspólny §4.12) |
+| `vehicle.collision.interior` | Kształty kolizji wnętrza: podłoga, ściany wewnętrzne, przegrody (profil wspólny §4.12) |
 | `vehicle.buffer.<end>.<side>` | Zderzak |
 | `vehicle.pantograph.<n>` | Zespół pantografu |
 | `vehicle.cab.<n>` | Zespół kabiny |

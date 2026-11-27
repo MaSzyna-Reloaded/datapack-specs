@@ -492,6 +492,19 @@ Temperatura fragmentu wynosi `T = T_air + mask.R × x × (temperature − T_air)
 
 Waga wpływu wynosi 1 wewnątrz kształtu i maleje płynnie (`smoothstep`) do 0 w odległości `falloff` od jego powierzchni. Lokalna temperatura otoczenia to `T = T_air + Σ waga × x × (temperature − T_air)`, ograniczona do przedziału wyznaczonego przez `T_air` i temperatury źródeł. Temperatura poniżej `T_air` opisuje źródło chłodu. Świat może przybliżać źródła na własnej siatce próbkowania, której rozdzielczość dobiera; wynik wpływa na śnieg i schnięcie w otoczeniu tak jak temperatura powietrza. Ukrycie węzła przez `KHR_node_visibility` wyłącza źródło. Modele dynamiczne używają tych samych pól, a poziom ogrzania podaje symulacja, np. kanałem `engine.heat`.
 
+### 4.12. Kolizje (DRAFT)
+
+Model może zawierać kształty kolizji. Są opcjonalne: model bez nich jest rysowany i symulowany jak dotąd. Kształty używają [OMI_physics_shape](https://github.com/omigroup/gltf-extensions/tree/main/extensions/2.0/OMI_physics_shape) (na poziomie dokumentu: `box`, `sphere`, `capsule`, `cylinder`, `convex`, `trimesh`), umieszczanych przez węzły z [OMI_physics_body](https://github.com/omigroup/gltf-extensions/tree/main/extensions/2.0/OMI_physics_body), których `motion.type` to `static` albo `kinematic`. Węzły kolizji nie mają siatki i nie są rysowane.
+
+`extras.semantic_id` węzła ciała określa jego rolę:
+
+| `semantic_id` | Rola |
+|---|---|
+| `<obiekt>.collision.body` | Zewnętrzna bryła obiektu, np. jedno pudełko |
+| `<obiekt>.collision.interior` | To, z czym zderza się osoba wewnątrz: podłoga, ściany wewnętrzne, przegrody |
+
+`<obiekt>` to rodzaj modelu, np. `vehicle` (zob. katalog [modeli dynamicznych](DRAFT_VEHICLE_FORMAT.md)). Ciało kolizji pod węzłem poruszanym klipem albo napędem proceduralnym (`…opening` drzwi, klapa) porusza się razem z pozą tego węzła.
+
 ## 5. Eksport i walidacja
 
 1. Autor przygotowuje geometrię, materiały, światła, pivoty i klipy w narzędziu.
@@ -520,4 +533,5 @@ Wersja profilu jest niezależna od `asset.version`. `PATCH` doprecyzowuje kontra
 
 - [glTF 2.0](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html).
 - [Rejestr rozszerzeń](https://github.com/KhronosGroup/glTF/blob/main/extensions/README.md).
+- [Rozszerzenia glTF OMI](https://github.com/omigroup/gltf-extensions) — `OMI_physics_shape`, `OMI_physics_body`.
 - [Eksporter świateł Blendera](https://github.com/blender/blender-addons/blob/main/io_scene_gltf2/blender/exp/gltf2_blender_gather_lights.py) — przykład implementacji konwersji; proces przetwarzania przypina konkretną wersję eksportera.
